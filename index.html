@@ -1,13 +1,81 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>weather_globe</title>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-  </body>
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Weather Globe</title>
+  <link rel="stylesheet" href="/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.45.0/dist/globe.gl.min.js"></script>
+</head>
+<body>
+  <div id="globe"></div>
+
+  <header id="header">
+    <h1>Weather Globe</h1>
+    <div id="legend">
+      <span class="legend-label">-30°C</span>
+      <div id="legend-gradient"></div>
+      <span class="legend-label">45°C</span>
+    </div>
+    <p id="hint">Hover a country for weather &bull; Click for details</p>
+  </header>
+
+  <div id="tooltip" class="hidden">
+    <div id="tooltip-country"></div>
+    <div id="tooltip-temp"></div>
+    <div id="tooltip-desc"></div>
+  </div>
+
+  <aside id="weather-panel" class="hidden">
+    <button id="panel-close">&#x2715;</button>
+    <div id="panel-flag"></div>
+    <h2 id="panel-country"></h2>
+    <div id="panel-weather-icon"></div>
+    <div class="panel-stat">
+      <label>Temperature</label>
+      <span id="panel-temp"></span>
+    </div>
+    <div class="panel-stat">
+      <label>Feels Like</label>
+      <span id="panel-feels"></span>
+    </div>
+    <div class="panel-stat">
+      <label>Humidity</label>
+      <span id="panel-humidity"></span>
+    </div>
+    <div class="panel-stat">
+      <label>Wind</label>
+      <span id="panel-wind"></span>
+    </div>
+    <div class="panel-stat">
+      <label>Conditions</label>
+      <span id="panel-desc"></span>
+    </div>
+    <div class="panel-stat">
+      <label>Pressure</label>
+      <span id="panel-pressure"></span>
+    </div>
+    <p id="panel-updated"></p>
+  </aside>
+
+  <div id="api-key-overlay">
+    <div id="api-key-box">
+      <div id="api-key-icon">&#127757;</div>
+      <h2>Weather Globe</h2>
+      <p>Enter your free <a href="https://openweathermap.org/api" target="_blank" rel="noopener">OpenWeatherMap API key</a> to get started.</p>
+      <input type="text" id="api-key-input" placeholder="Paste your API key here..." autocomplete="off" spellcheck="false" />
+      <button id="api-key-submit">Launch Globe</button>
+      <p class="api-note">Your key is stored only in this browser session.</p>
+    </div>
+  </div>
+
+  <div id="loading" class="hidden">
+    <div class="spinner"></div>
+    <p>Loading globe data...</p>
+  </div>
+
+  <div id="error-toast" class="hidden"></div>
+
+  <script type="module" src="/main.js"></script>
+</body>
 </html>
