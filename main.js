@@ -160,8 +160,8 @@ async function fetchCountryWeather(isoCode) {
 async function fetchStateWeather(feature) {
   const props = feature.properties
   const key = props.adm1_code
-  const lat = props.LATITUDE
-  const lon = props.LONGITUDE
+  const lat = props.latitude
+  const lon = props.longitude
   if (!key || lat == null || lon == null) return null
   const name = `${props.name}, ${props.admin}`
   return fetchWeatherByLatLon(lat, lon, key, name)
@@ -407,8 +407,8 @@ async function handleStateClick(polygon) {
   const flagCode = (props.iso_a2 || '').toLowerCase()
   showPanel(weather, flagCode)
 
-  if (globe && props.LATITUDE != null && props.LONGITUDE != null) {
-    globe.pointOfView({ lat: props.LATITUDE, lng: props.LONGITUDE, altitude: 0.6 }, 800)
+  if (globe && props.latitude != null && props.longitude != null) {
+    globe.pointOfView({ lat: props.latitude, lng: props.longitude, altitude: 0.6 }, 800)
   }
 }
 
