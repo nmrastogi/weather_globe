@@ -64,7 +64,7 @@ function init() {
 async function loadData() {
   const [geoRes, centroidsRes] = await Promise.all([
     fetch(GEOJSON_URL),
-    fetch('/countryCentroids.json')
+    fetch(import.meta.env.BASE_URL + 'countryCentroids.json')
   ])
 
   if (!geoRes.ok) throw new Error('Failed to load GeoJSON')
