@@ -8,10 +8,16 @@ let OWM_API_KEY =
   sessionStorage.getItem('owm_api_key') ||
   null
 
-const GEOJSON_URL =
+const COUNTRY_GEOJSON_URL =
   'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_110m_admin_0_countries.geojson'
 
+const STATE_GEOJSON_URL =
+  'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_1_states_provinces.geojson'
+
 const OWM_BASE = 'https://api.openweathermap.org/data/2.5/weather'
+
+// Altitude below which we switch to state/province view
+const ZOOM_STATE_THRESHOLD = 1.5
 
 // ── DOM references ─────────────────────────────────────────────────────────────
 
@@ -27,13 +33,19 @@ const apiOverlay   = document.getElementById('api-key-overlay')
 const apiInput     = document.getElementById('api-key-input')
 const apiSubmit    = document.getElementById('api-key-submit')
 const errorToast   = document.getElementById('error-toast')
+const zoomBadge    = document.getElementById('zoom-badge')
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
-const weatherMap = new Map()   // iso → weather object
-let hoveredPolygon = null
-let globe = null
-let centroids = {}
+const countryWeatherMap = new Map()  // ISO_A2   → weather
+const stateWeatherMap   = new Map()  // adm1_code → weather
+let countryGeoData  = null
+let stateGeoData    = null           // loaded lazily on first zoom-in
+let stateGeoLoading = false
+let currentMode     = 'country'      // 'country' | 'state'
+let hoveredPolygon  = null
+let globe           = null
+let centroids       = {}
 let pendingDebounce = null
 let tooltipX = 0, tooltipY = 0
 
@@ -61,9 +73,9 @@ function init() {
 
 // ── Data loading ───────────────────────────────────────────────────────────────
 
-async function loadData() {
+async function loadCountryData() {
   const [geoRes, centroidsRes] = await Promise.all([
-    fetch(GEOJSON_URL),
+    fetch(COUNTRY_GEOJSON_URL),
     fetch(import.meta.env.BASE_URL + 'countryCentroids.json')
   ])
 
@@ -79,18 +91,33 @@ async function loadData() {
   return geoData
 }
 
+async function loadStateData() {
+  if (stateGeoData) return stateGeoData
+  if (stateGeoLoading) return null
+  stateGeoLoading = true
+
+  zoomBadge.textContent = 'Loading states...'
+
+  try {
+    const res = await fetch(STATE_GEOJSON_URL)
+    if (!res.ok) throw new Error('Failed to load state GeoJSON')
+    stateGeoData = await res.json()
+    return stateGeoData
+  } catch (err) {
+    console.warn('State GeoJSON load failed:', err)
+    return null
+  } finally {
+    stateGeoLoading = false
+  }
+}
+
 // ── Weather fetch ──────────────────────────────────────────────────────────────
 
-async function fetchWeather(isoCode) {
-  if (!isoCode || isoCode === '-99') return null
-
-  const cached = getCached(isoCode)
+async function fetchWeatherByLatLon(lat, lon, cacheKey, displayName) {
+  const cached = getCached(cacheKey)
   if (cached) return cached
 
-  const centroid = centroids[isoCode]
-  if (!centroid) return null
-
-  const url = `${OWM_BASE}?lat=${centroid.lat}&lon=${centroid.lon}&appid=${OWM_API_KEY}&units=metric`
+  const url = `${OWM_BASE}?lat=${lat}&lon=${lon}&appid=${OWM_API_KEY}&units=metric`
 
   try {
     const res = await fetch(url)
@@ -99,14 +126,11 @@ async function fetchWeather(isoCode) {
       showError('Invalid or inactive API key. New keys can take up to 2 hours to activate.')
       return null
     }
-    if (!res.ok) {
-      console.warn(`OWM ${res.status} for ${isoCode}`)
-      return null
-    }
+    if (!res.ok) return null
 
     const data = await res.json()
     const weather = {
-      country:     centroid.name,
+      country:     displayName,
       temp:        Math.round(data.main.temp),
       feelsLike:   Math.round(data.main.feels_like),
       humidity:    data.main.humidity,
@@ -118,12 +142,29 @@ async function fetchWeather(isoCode) {
       dt:          data.dt
     }
 
-    setCache(isoCode, weather)
+    setCache(cacheKey, weather)
     return weather
   } catch (err) {
-    console.warn(`Weather fetch error for ${isoCode}:`, err)
+    console.warn(`Weather fetch error for ${cacheKey}:`, err)
     return null
   }
+}
+
+async function fetchCountryWeather(isoCode) {
+  if (!isoCode || isoCode === '-99') return null
+  const centroid = centroids[isoCode]
+  if (!centroid) return null
+  return fetchWeatherByLatLon(centroid.lat, centroid.lon, isoCode, centroid.name)
+}
+
+async function fetchStateWeather(feature) {
+  const props = feature.properties
+  const key = props.adm1_code
+  const lat = props.LATITUDE
+  const lon = props.LONGITUDE
+  if (!key || lat == null || lon == null) return null
+  const name = `${props.name}, ${props.admin}`
+  return fetchWeatherByLatLon(lat, lon, key, name)
 }
 
 // ── Globe setup ────────────────────────────────────────────────────────────────
@@ -131,9 +172,8 @@ async function fetchWeather(isoCode) {
 async function launchGlobe() {
   loading.classList.remove('hidden')
 
-  let geoData
   try {
-    geoData = await loadData()
+    countryGeoData = await loadCountryData()
   } catch (err) {
     loading.classList.add('hidden')
     showError('Failed to load globe data. Check your internet connection.')
@@ -148,18 +188,10 @@ async function launchGlobe() {
     .showAtmosphere(true)
     .atmosphereColor('#1a6fa8')
     .atmosphereAltitude(0.15)
-    .polygonsData(geoData.features)
+    .polygonsData(countryGeoData.features)
     .polygonAltitude(d => d === hoveredPolygon ? 0.05 : 0.01)
-    .polygonCapColor(d => {
-      const iso = d.properties.ISO_A2
-      const w = weatherMap.get(iso)
-      return tempToColor(w ? w.temp : null)
-    })
-    .polygonSideColor(d => {
-      const iso = d.properties.ISO_A2
-      const w = weatherMap.get(iso)
-      return tempToSideColor(w ? w.temp : null)
-    })
+    .polygonCapColor(d => getPolygonColor(d))
+    .polygonSideColor(d => getPolygonSideColor(d))
     .polygonStrokeColor(() => 'rgba(255,255,255,0.12)')
     .polygonLabel(() => '')
     .onPolygonHover(handleHover)
@@ -174,8 +206,76 @@ async function launchGlobe() {
     globe.controls().autoRotate = false
   })
 
-  // Start background pre-warm after 1 second
+  // Watch zoom level to switch between country and state views
+  globe.controls().addEventListener('change', onCameraChange)
+
   setTimeout(preWarmCache, 1000)
+}
+
+// ── Zoom / layer switching ─────────────────────────────────────────────────────
+
+let zoomSwitchTimer = null
+
+function onCameraChange() {
+  const altitude = globe.pointOfView().altitude
+  const shouldBeState = altitude < ZOOM_STATE_THRESHOLD
+
+  if (shouldBeState && currentMode === 'country') {
+    // Debounce 300ms to avoid thrashing while scrolling
+    clearTimeout(zoomSwitchTimer)
+    zoomSwitchTimer = setTimeout(() => switchToStates(), 300)
+  } else if (!shouldBeState && currentMode === 'state') {
+    clearTimeout(zoomSwitchTimer)
+    zoomSwitchTimer = setTimeout(() => switchToCountries(), 300)
+  }
+}
+
+async function switchToStates() {
+  if (currentMode === 'state') return
+  currentMode = 'state'
+  hoveredPolygon = null
+  tooltip.classList.add('hidden')
+  zoomBadge.textContent = 'State view'
+  zoomBadge.classList.remove('hidden')
+
+  const data = await loadStateData()
+  if (!data) {
+    currentMode = 'country'
+    zoomBadge.classList.add('hidden')
+    return
+  }
+
+  globe.polygonsData(data.features)
+  zoomBadge.textContent = 'State / Province view'
+}
+
+function switchToCountries() {
+  if (currentMode === 'country') return
+  currentMode = 'country'
+  hoveredPolygon = null
+  tooltip.classList.add('hidden')
+  zoomBadge.classList.add('hidden')
+  globe.polygonsData(countryGeoData.features)
+}
+
+// ── Color accessors ────────────────────────────────────────────────────────────
+
+function getPolygonColor(d) {
+  if (currentMode === 'state') {
+    const w = stateWeatherMap.get(d.properties.adm1_code)
+    return tempToColor(w ? w.temp : null)
+  }
+  const w = countryWeatherMap.get(d.properties.ISO_A2)
+  return tempToColor(w ? w.temp : null)
+}
+
+function getPolygonSideColor(d) {
+  if (currentMode === 'state') {
+    const w = stateWeatherMap.get(d.properties.adm1_code)
+    return tempToSideColor(w ? w.temp : null)
+  }
+  const w = countryWeatherMap.get(d.properties.ISO_A2)
+  return tempToSideColor(w ? w.temp : null)
 }
 
 // ── Hover handler ──────────────────────────────────────────────────────────────
@@ -183,9 +283,7 @@ async function launchGlobe() {
 document.addEventListener('mousemove', e => {
   tooltipX = e.clientX
   tooltipY = e.clientY
-  if (!tooltip.classList.contains('hidden')) {
-    positionTooltip()
-  }
+  if (!tooltip.classList.contains('hidden')) positionTooltip()
 })
 
 async function handleHover(polygon) {
@@ -197,33 +295,58 @@ async function handleHover(polygon) {
     return
   }
 
-  const iso = polygon.properties.ISO_A2
-  if (!iso || iso === '-99') {
-    tooltip.classList.add('hidden')
-    return
+  if (currentMode === 'state') {
+    handleStateHover(polygon)
+  } else {
+    handleCountryHover(polygon)
   }
+}
 
-  const countryName = polygon.properties.NAME_EN || polygon.properties.NAME || iso
+async function handleCountryHover(polygon) {
+  const iso = polygon.properties.ISO_A2
+  if (!iso || iso === '-99') { tooltip.classList.add('hidden'); return }
 
-  // Show tooltip immediately with country name
-  tooltipName.textContent = countryName
-  tooltipTemp.textContent = weatherMap.has(iso) ? `${weatherMap.get(iso).temp}°C` : '...'
-  tooltipDesc.textContent = weatherMap.has(iso) ? weatherMap.get(iso).description : ''
+  const name = polygon.properties.NAME_EN || polygon.properties.NAME || iso
+  const cached = countryWeatherMap.get(iso)
+
+  tooltipName.textContent = name
+  tooltipTemp.textContent = cached ? `${cached.temp}°C` : '...'
+  tooltipDesc.textContent = cached ? cached.description : ''
   tooltip.classList.remove('hidden')
   positionTooltip()
 
   if (pendingDebounce) clearTimeout(pendingDebounce)
-
-  // Debounce 150ms before fetching
   pendingDebounce = setTimeout(async () => {
-    const weather = await fetchWeather(iso)
-    // Check that the user is still hovering the same polygon
+    const weather = await fetchCountryWeather(iso)
     if (!weather || hoveredPolygon !== polygon) return
-
     tooltipTemp.textContent = `${weather.temp}°C`
     tooltipDesc.textContent = weather.description
+    countryWeatherMap.set(iso, weather)
+    refreshGlobeColors()
+  }, 150)
+}
 
-    weatherMap.set(iso, weather)
+async function handleStateHover(polygon) {
+  const props = polygon.properties
+  const key = props.adm1_code
+  if (!key) { tooltip.classList.add('hidden'); return }
+
+  const name = props.name ? `${props.name}, ${props.admin}` : props.admin
+  const cached = stateWeatherMap.get(key)
+
+  tooltipName.textContent = name
+  tooltipTemp.textContent = cached ? `${cached.temp}°C` : '...'
+  tooltipDesc.textContent = cached ? cached.description : ''
+  tooltip.classList.remove('hidden')
+  positionTooltip()
+
+  if (pendingDebounce) clearTimeout(pendingDebounce)
+  pendingDebounce = setTimeout(async () => {
+    const weather = await fetchStateWeather(polygon)
+    if (!weather || hoveredPolygon !== polygon) return
+    tooltipTemp.textContent = `${weather.temp}°C`
+    tooltipDesc.textContent = weather.description
+    stateWeatherMap.set(key, weather)
     refreshGlobeColors()
   }, 150)
 }
@@ -245,48 +368,74 @@ function positionTooltip() {
 async function handleClick(polygon) {
   if (!polygon) return
 
+  if (currentMode === 'state') {
+    await handleStateClick(polygon)
+  } else {
+    await handleCountryClick(polygon)
+  }
+}
+
+async function handleCountryClick(polygon) {
   const iso = polygon.properties.ISO_A2
   if (!iso || iso === '-99') return
 
-  let weather = weatherMap.get(iso) || await fetchWeather(iso)
+  let weather = countryWeatherMap.get(iso) || await fetchCountryWeather(iso)
   if (!weather) return
 
-  weatherMap.set(iso, weather)
+  countryWeatherMap.set(iso, weather)
+  refreshGlobeColors()
+  showPanel(weather, iso.toLowerCase())
+
+  const centroid = centroids[iso]
+  if (centroid && globe) {
+    globe.pointOfView({ lat: centroid.lat, lng: centroid.lon, altitude: 1.2 }, 1000)
+  }
+}
+
+async function handleStateClick(polygon) {
+  const props = polygon.properties
+  const key = props.adm1_code
+  if (!key) return
+
+  let weather = stateWeatherMap.get(key) || await fetchStateWeather(polygon)
+  if (!weather) return
+
+  stateWeatherMap.set(key, weather)
   refreshGlobeColors()
 
-  // Populate panel
+  // Use country flag (iso_a2 property)
+  const flagCode = (props.iso_a2 || '').toLowerCase()
+  showPanel(weather, flagCode)
+
+  if (globe && props.LATITUDE != null && props.LONGITUDE != null) {
+    globe.pointOfView({ lat: props.LATITUDE, lng: props.LONGITUDE, altitude: 0.6 }, 800)
+  }
+}
+
+function showPanel(weather, flagCode) {
   document.getElementById('panel-country').textContent  = weather.country
   document.getElementById('panel-temp').textContent     = `${weather.temp}°C`
   document.getElementById('panel-feels').textContent    = `${weather.feelsLike}°C`
   document.getElementById('panel-humidity').textContent = `${weather.humidity}%`
   document.getElementById('panel-pressure').textContent = `${weather.pressure} hPa`
 
-  if (weather.windSpeed != null) {
-    document.getElementById('panel-wind').textContent =
-      `${weather.windSpeed} m/s ${weather.windDeg != null ? compassDir(weather.windDeg) : ''}`
-  } else {
-    document.getElementById('panel-wind').textContent = 'N/A'
-  }
+  document.getElementById('panel-wind').textContent = weather.windSpeed != null
+    ? `${weather.windSpeed} m/s ${weather.windDeg != null ? compassDir(weather.windDeg) : ''}`
+    : 'N/A'
 
   document.getElementById('panel-desc').textContent = capitalize(weather.description)
 
   document.getElementById('panel-weather-icon').innerHTML =
     `<img src="https://openweathermap.org/img/wn/${weather.icon}@2x.png" alt="${weather.description}" />`
 
-  document.getElementById('panel-flag').innerHTML =
-    `<img src="https://flagcdn.com/64x48/${iso.toLowerCase()}.png" alt="${weather.country} flag" onerror="this.style.display='none'" />`
+  document.getElementById('panel-flag').innerHTML = flagCode
+    ? `<img src="https://flagcdn.com/64x48/${flagCode}.png" alt="flag" onerror="this.style.display='none'" />`
+    : ''
 
   const updatedAt = new Date(weather.dt * 1000)
-  document.getElementById('panel-updated').textContent =
-    `Updated: ${updatedAt.toLocaleTimeString()}`
+  document.getElementById('panel-updated').textContent = `Updated: ${updatedAt.toLocaleTimeString()}`
 
   panel.classList.remove('hidden')
-
-  // Fly globe to country
-  const centroid = centroids[iso]
-  if (centroid && globe) {
-    globe.pointOfView({ lat: centroid.lat, lng: centroid.lon, altitude: 1.8 }, 1000)
-  }
 }
 
 panelClose.addEventListener('click', () => panel.classList.add('hidden'))
@@ -295,7 +444,6 @@ panelClose.addEventListener('click', () => panel.classList.add('hidden'))
 
 function refreshGlobeColors() {
   if (!globe) return
-  // Reassigning the same array triggers Globe.gl to re-evaluate color accessors
   globe.polygonsData([...globe.polygonsData()])
 }
 
@@ -310,10 +458,8 @@ async function preWarmCache() {
   for (const iso of priority) {
     if (getCached(iso)) continue
     await new Promise(r => setTimeout(r, 400))
-    const weather = await fetchWeather(iso)
-    if (weather) {
-      weatherMap.set(iso, weather)
-    }
+    const weather = await fetchCountryWeather(iso)
+    if (weather) countryWeatherMap.set(iso, weather)
   }
 
   refreshGlobeColors()
