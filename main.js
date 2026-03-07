@@ -272,6 +272,13 @@ async function launchGlobe() {
     globe.controls().autoRotate = false
   })
 
+  globeEl.addEventListener('mouseleave', () => {
+    tooltip.classList.add('hidden')
+    if (pendingDebounce) clearTimeout(pendingDebounce)
+    hoveredPolygon = null
+    hoveredCity = null
+  })
+
   // Watch zoom level to switch between country / state / city views
   globe.controls().addEventListener('change', onCameraChange)
 
@@ -385,6 +392,7 @@ document.addEventListener('mousemove', e => {
 })
 
 async function handleHover(polygon) {
+  const prev = hoveredPolygon
   hoveredPolygon = polygon
 
   // City mode uses onPointHover — ignore polygon hover
@@ -394,6 +402,12 @@ async function handleHover(polygon) {
     tooltip.classList.add('hidden')
     if (pendingDebounce) clearTimeout(pendingDebounce)
     return
+  }
+
+  // Hide tooltip when switching between different polygons
+  if (prev && prev !== polygon) {
+    tooltip.classList.add('hidden')
+    if (pendingDebounce) clearTimeout(pendingDebounce)
   }
 
   if (currentMode === 'state') {
