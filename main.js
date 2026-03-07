@@ -14,10 +14,14 @@ const COUNTRY_GEOJSON_URL =
 const STATE_GEOJSON_URL =
   'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_1_states_provinces.geojson'
 
+const CITY_GEOJSON_URL =
+  'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_populated_places_simple.geojson'
+
 const OWM_BASE = 'https://api.openweathermap.org/data/2.5/weather'
 
-// Altitude below which we switch to state/province view
+// Altitude thresholds for layer switching
 const ZOOM_STATE_THRESHOLD = 1.5
+const ZOOM_CITY_THRESHOLD  = 0.35
 
 // ── DOM references ─────────────────────────────────────────────────────────────
 
@@ -37,13 +41,19 @@ const zoomBadge    = document.getElementById('zoom-badge')
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
-const countryWeatherMap = new Map()  // ISO_A2   → weather
+const countryWeatherMap = new Map()  // ISO_A2    → weather
 const stateWeatherMap   = new Map()  // adm1_code → weather
+const cityWeatherMap    = new Map()  // city key  → weather
+
 let countryGeoData  = null
-let stateGeoData    = null           // loaded lazily on first zoom-in
+let stateGeoData    = null  // loaded lazily on first zoom-in to state level
+let cityGeoData     = null  // loaded lazily on first zoom-in to city level
 let stateGeoLoading = false
-let currentMode     = 'country'      // 'country' | 'state'
+let cityGeoLoading  = false
+
+let currentMode     = 'country'  // 'country' | 'state' | 'city'
 let hoveredPolygon  = null
+let hoveredCity     = null
 let globe           = null
 let centroids       = {}
 let pendingDebounce = null
@@ -111,6 +121,39 @@ async function loadStateData() {
   }
 }
 
+async function loadCityData() {
+  if (cityGeoData) return cityGeoData
+  if (cityGeoLoading) return null
+  cityGeoLoading = true
+
+  zoomBadge.textContent = 'Loading cities...'
+
+  try {
+    const res = await fetch(CITY_GEOJSON_URL)
+    if (!res.ok) throw new Error('Failed to load city GeoJSON')
+    const raw = await res.json()
+
+    // Filter to major cities (pop > 300k) and normalize to plain objects
+    cityGeoData = raw.features
+      .filter(f => f.properties.POP_MAX > 300000)
+      .map(f => ({
+        name:    f.properties.NAME,
+        country: f.properties.ADM0NAME,
+        state:   f.properties.ADM1NAME,
+        lat:     f.geometry.coordinates[1],
+        lon:     f.geometry.coordinates[0],
+        pop:     f.properties.POP_MAX,
+      }))
+
+    return cityGeoData
+  } catch (err) {
+    console.warn('City GeoJSON load failed:', err)
+    return null
+  } finally {
+    cityGeoLoading = false
+  }
+}
+
 // ── Weather fetch ──────────────────────────────────────────────────────────────
 
 async function fetchWeatherByLatLon(lat, lon, cacheKey, displayName) {
@@ -167,6 +210,15 @@ async function fetchStateWeather(feature) {
   return fetchWeatherByLatLon(lat, lon, key, name)
 }
 
+function cityKey(city) {
+  return `city:${city.name}:${city.lat.toFixed(2)}:${city.lon.toFixed(2)}`
+}
+
+async function fetchCityWeather(city) {
+  const key = cityKey(city)
+  return fetchWeatherByLatLon(city.lat, city.lon, key, `${city.name}, ${city.country}`)
+}
+
 // ── Globe setup ────────────────────────────────────────────────────────────────
 
 async function launchGlobe() {
@@ -188,6 +240,7 @@ async function launchGlobe() {
     .showAtmosphere(true)
     .atmosphereColor('#c47a1a')
     .atmosphereAltitude(0.12)
+    // Polygon (country / state) layer
     .polygonsData(countryGeoData.features)
     .polygonAltitude(d => d === hoveredPolygon ? 0.05 : 0.01)
     .polygonCapColor(d => getPolygonColor(d))
@@ -196,6 +249,17 @@ async function launchGlobe() {
     .polygonLabel(() => '')
     .onPolygonHover(handleHover)
     .onPolygonClick(handleClick)
+    // City points layer (initially empty)
+    .pointsData([])
+    .pointColor(d => {
+      const w = cityWeatherMap.get(cityKey(d))
+      return tempToColor(w ? w.temp : null)
+    })
+    .pointRadius(d => 0.3 + Math.log10(Math.max(1, d.pop / 300000)) * 0.15)
+    .pointAltitude(0.015)
+    .pointLabel(() => '')
+    .onPointHover(handleCityHover)
+    .onPointClick(handleCityClick)
     (globeEl)
 
   globe.controls().autoRotate = true
@@ -206,7 +270,7 @@ async function launchGlobe() {
     globe.controls().autoRotate = false
   })
 
-  // Watch zoom level to switch between country and state views
+  // Watch zoom level to switch between country / state / city views
   globe.controls().addEventListener('change', onCameraChange)
 
   setTimeout(preWarmCache, 1000)
@@ -218,23 +282,53 @@ let zoomSwitchTimer = null
 
 function onCameraChange() {
   const altitude = globe.pointOfView().altitude
-  const shouldBeState = altitude < ZOOM_STATE_THRESHOLD
 
-  if (shouldBeState && currentMode === 'country') {
-    // Debounce 300ms to avoid thrashing while scrolling
+  if (altitude < ZOOM_CITY_THRESHOLD && currentMode !== 'city') {
+    clearTimeout(zoomSwitchTimer)
+    zoomSwitchTimer = setTimeout(() => switchToCities(), 300)
+  } else if (altitude >= ZOOM_CITY_THRESHOLD && altitude < ZOOM_STATE_THRESHOLD && currentMode !== 'state') {
     clearTimeout(zoomSwitchTimer)
     zoomSwitchTimer = setTimeout(() => switchToStates(), 300)
-  } else if (!shouldBeState && currentMode === 'state') {
+  } else if (altitude >= ZOOM_STATE_THRESHOLD && currentMode !== 'country') {
     clearTimeout(zoomSwitchTimer)
     zoomSwitchTimer = setTimeout(() => switchToCountries(), 300)
   }
+}
+
+async function switchToCities() {
+  if (currentMode === 'city') return
+  currentMode = 'city'
+  hoveredPolygon = null
+  hoveredCity = null
+  tooltip.classList.add('hidden')
+  zoomBadge.textContent = 'City view'
+  zoomBadge.classList.remove('hidden')
+
+  // Ensure state polygons are shown as background context
+  const stateData = await loadStateData()
+  if (stateData && globe.polygonsData() !== stateData.features) {
+    globe.polygonsData(stateData.features)
+  }
+
+  const cities = await loadCityData()
+  if (!cities) {
+    // Fall back to state mode if city data fails
+    currentMode = 'state'
+    zoomBadge.textContent = 'State / Province view'
+    return
+  }
+
+  globe.pointsData(cities)
+  zoomBadge.textContent = 'City view'
 }
 
 async function switchToStates() {
   if (currentMode === 'state') return
   currentMode = 'state'
   hoveredPolygon = null
+  hoveredCity = null
   tooltip.classList.add('hidden')
+  globe.pointsData([])
   zoomBadge.textContent = 'State view'
   zoomBadge.classList.remove('hidden')
 
@@ -253,7 +347,9 @@ function switchToCountries() {
   if (currentMode === 'country') return
   currentMode = 'country'
   hoveredPolygon = null
+  hoveredCity = null
   tooltip.classList.add('hidden')
+  globe.pointsData([])
   zoomBadge.classList.add('hidden')
   globe.polygonsData(countryGeoData.features)
 }
@@ -261,7 +357,7 @@ function switchToCountries() {
 // ── Color accessors ────────────────────────────────────────────────────────────
 
 function getPolygonColor(d) {
-  if (currentMode === 'state') {
+  if (currentMode === 'state' || currentMode === 'city') {
     const w = stateWeatherMap.get(d.properties.adm1_code)
     return tempToColor(w ? w.temp : null)
   }
@@ -270,7 +366,7 @@ function getPolygonColor(d) {
 }
 
 function getPolygonSideColor(d) {
-  if (currentMode === 'state') {
+  if (currentMode === 'state' || currentMode === 'city') {
     const w = stateWeatherMap.get(d.properties.adm1_code)
     return tempToSideColor(w ? w.temp : null)
   }
@@ -288,6 +384,9 @@ document.addEventListener('mousemove', e => {
 
 async function handleHover(polygon) {
   hoveredPolygon = polygon
+
+  // City mode uses onPointHover — ignore polygon hover
+  if (currentMode === 'city') return
 
   if (!polygon) {
     tooltip.classList.add('hidden')
@@ -351,6 +450,35 @@ async function handleStateHover(polygon) {
   }, 150)
 }
 
+async function handleCityHover(city) {
+  hoveredCity = city
+
+  if (!city) {
+    tooltip.classList.add('hidden')
+    if (pendingDebounce) clearTimeout(pendingDebounce)
+    return
+  }
+
+  const key = cityKey(city)
+  const cached = cityWeatherMap.get(key)
+
+  tooltipName.textContent = `${city.name}, ${city.country}`
+  tooltipTemp.textContent = cached ? `${cached.temp}°C` : '...'
+  tooltipDesc.textContent = cached ? cached.description : ''
+  tooltip.classList.remove('hidden')
+  positionTooltip()
+
+  if (pendingDebounce) clearTimeout(pendingDebounce)
+  pendingDebounce = setTimeout(async () => {
+    const weather = await fetchCityWeather(city)
+    if (!weather || hoveredCity !== city) return
+    tooltipTemp.textContent = `${weather.temp}°C`
+    tooltipDesc.textContent = weather.description
+    cityWeatherMap.set(key, weather)
+    refreshCityColors()
+  }, 150)
+}
+
 function positionTooltip() {
   const offset = 16
   const w = tooltip.offsetWidth || 160
@@ -367,6 +495,8 @@ function positionTooltip() {
 
 async function handleClick(polygon) {
   if (!polygon) return
+  // City mode uses onPointClick — ignore polygon clicks
+  if (currentMode === 'city') return
 
   if (currentMode === 'state') {
     await handleStateClick(polygon)
@@ -403,12 +533,27 @@ async function handleStateClick(polygon) {
   stateWeatherMap.set(key, weather)
   refreshGlobeColors()
 
-  // Use country flag (iso_a2 property)
   const flagCode = (props.iso_a2 || '').toLowerCase()
   showPanel(weather, flagCode)
 
   if (globe && props.latitude != null && props.longitude != null) {
     globe.pointOfView({ lat: props.latitude, lng: props.longitude, altitude: 0.6 }, 800)
+  }
+}
+
+async function handleCityClick(city) {
+  if (!city) return
+
+  const key = cityKey(city)
+  let weather = cityWeatherMap.get(key) || await fetchCityWeather(city)
+  if (!weather) return
+
+  cityWeatherMap.set(key, weather)
+  refreshCityColors()
+  showPanel(weather, null)
+
+  if (globe) {
+    globe.pointOfView({ lat: city.lat, lng: city.lon, altitude: 0.15 }, 800)
   }
 }
 
@@ -445,6 +590,11 @@ panelClose.addEventListener('click', () => panel.classList.add('hidden'))
 function refreshGlobeColors() {
   if (!globe) return
   globe.polygonsData([...globe.polygonsData()])
+}
+
+function refreshCityColors() {
+  if (!globe || currentMode !== 'city') return
+  globe.pointsData([...globe.pointsData()])
 }
 
 // ── Pre-warm cache ─────────────────────────────────────────────────────────────
