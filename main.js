@@ -251,6 +251,8 @@ async function launchGlobe() {
     .onPolygonClick(handleClick)
     // City points layer (initially empty)
     .pointsData([])
+    .pointLat(d => d.lat)
+    .pointLng(d => d.lon)
     .pointColor(d => {
       const w = cityWeatherMap.get(cityKey(d))
       return tempToColor(w ? w.temp : null)
