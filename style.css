@@ -5,226 +5,232 @@
   padding: 0;
 }
 
+/* ── Design tokens ───────────────────────────────────────────────────────────── */
+:root {
+  --bg:        #07070a;
+  --surface:   #0e0e14;
+  --border:    #2a2a38;
+  --accent:    #f5a623;
+  --accent-dim: #9a6615;
+  --text:      #d4cfc4;
+  --text-dim:  #5a5650;
+  --text-muted: #3a3830;
+  --danger:    #c0392b;
+  --mono: 'SF Mono', 'Fira Mono', 'Consolas', monospace;
+}
+
 /* ── Base ────────────────────────────────────────────────────────────────────── */
 body {
-  background: #000;
-  color: #e0e8f0;
-  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, sans-serif;
   overflow: hidden;
   height: 100vh;
   width: 100vw;
 }
 
-/* ── Globe container ─────────────────────────────────────────────────────────── */
+/* ── Globe ───────────────────────────────────────────────────────────────────── */
 #globe {
   width: 100vw;
   height: 100vh;
   cursor: grab;
 }
+#globe:active { cursor: grabbing; }
 
-#globe:active {
-  cursor: grabbing;
-}
-
-/* ── Header ──────────────────────────────────────────────────────────────────── */
+/* ── Header — bottom left strip ─────────────────────────────────────────────── */
 #header {
   position: fixed;
-  top: 20px;
-  left: 24px;
+  bottom: 28px;
+  left: 28px;
   z-index: 10;
   pointer-events: none;
   user-select: none;
 }
 
 #header h1 {
-  font-size: 1.5rem;
-  font-weight: 700;
-  letter-spacing: 3px;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  font-weight: 400;
+  letter-spacing: 4px;
   text-transform: uppercase;
-  color: #7dd3fc;
-  text-shadow: 0 0 24px rgba(125, 211, 252, 0.6);
-  margin-bottom: 14px;
+  color: var(--accent);
+  margin-bottom: 12px;
 }
 
 #legend {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
 }
 
 .legend-label {
-  font-size: 0.7rem;
-  color: #64748b;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--text-dim);
   white-space: nowrap;
 }
 
 #legend-gradient {
-  width: 120px;
-  height: 8px;
-  border-radius: 4px;
+  width: 100px;
+  height: 3px;
   background: linear-gradient(to right,
-    rgb(0, 0, 200),
-    rgb(0, 150, 255),
-    rgb(0, 220, 220),
-    rgb(80, 200, 80),
+    rgb(0, 60, 200),
+    rgb(0, 180, 220),
+    rgb(60, 190, 80),
     rgb(230, 220, 0),
     rgb(255, 120, 0),
-    rgb(220, 0, 0)
+    rgb(210, 0, 0)
   );
-  box-shadow: 0 0 8px rgba(255,255,255,0.1);
 }
 
 #hint {
-  font-size: 0.72rem;
-  color: #475569;
-  letter-spacing: 0.5px;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  color: var(--text-muted);
+  letter-spacing: 1px;
 }
 
 /* ── Tooltip ─────────────────────────────────────────────────────────────────── */
 #tooltip {
   position: fixed;
   z-index: 30;
-  background: rgba(8, 18, 36, 0.94);
-  border: 1px solid rgba(125, 211, 252, 0.25);
-  border-radius: 10px;
-  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--accent);
+  padding: 10px 14px 10px 12px;
   pointer-events: none;
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  min-width: 150px;
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.6);
-  transition: opacity 0.1s ease;
+  min-width: 140px;
 }
 
 #tooltip-country {
-  font-size: 0.9rem;
-  font-weight: 700;
-  color: #e2e8f0;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  font-weight: 400;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text-dim);
   margin-bottom: 4px;
 }
 
 #tooltip-temp {
-  font-size: 1.5rem;
-  font-weight: 300;
-  color: #7dd3fc;
-  line-height: 1.1;
+  font-family: var(--mono);
+  font-size: 2rem;
+  font-weight: 400;
+  color: var(--accent);
+  line-height: 1;
 }
 
 #tooltip-desc {
-  font-size: 0.72rem;
-  color: #94a3b8;
+  font-size: 0.7rem;
+  color: var(--text-dim);
   text-transform: capitalize;
-  margin-top: 3px;
+  margin-top: 5px;
+  letter-spacing: 0.5px;
 }
 
-/* ── Weather side panel ──────────────────────────────────────────────────────── */
+/* ── Weather panel — left side ───────────────────────────────────────────────── */
 #weather-panel {
   position: fixed;
   top: 50%;
-  right: 28px;
+  left: 28px;
   transform: translateY(-50%);
   z-index: 20;
-  background: rgba(8, 18, 36, 0.94);
-  border: 1px solid rgba(125, 211, 252, 0.2);
-  border-radius: 18px;
-  padding: 28px 24px 20px;
-  min-width: 250px;
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-  box-shadow: 0 8px 50px rgba(0, 0, 0, 0.7);
-  animation: slideIn 0.25s ease;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--accent);
+  padding: 0;
+  width: 260px;
+  animation: panelIn 0.2s ease;
 }
 
-@keyframes slideIn {
-  from {
-    opacity: 0;
-    transform: translateY(-50%) translateX(24px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(-50%) translateX(0);
-  }
+@keyframes panelIn {
+  from { opacity: 0; transform: translateY(-50%) translateX(-16px); }
+  to   { opacity: 1; transform: translateY(-50%) translateX(0); }
 }
 
 #panel-close {
   position: absolute;
-  top: 14px;
-  right: 16px;
+  top: 10px;
+  right: 12px;
   background: none;
   border: none;
-  color: #475569;
-  font-size: 1rem;
+  color: var(--text-dim);
+  font-size: 0.75rem;
   cursor: pointer;
-  line-height: 1;
+  font-family: var(--mono);
+  letter-spacing: 1px;
   padding: 2px 4px;
-  border-radius: 4px;
-  transition: color 0.15s, background 0.15s;
+  transition: color 0.1s;
 }
+#panel-close:hover { color: var(--accent); }
 
-#panel-close:hover {
-  color: #e2e8f0;
-  background: rgba(255,255,255,0.08);
-}
-
+/* Panel header block */
 #panel-flag {
-  margin-bottom: 10px;
-  min-height: 18px;
-}
-
-#panel-flag img {
-  border-radius: 4px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
-  display: block;
+  display: none; /* hidden — flags don't suit the aesthetic */
 }
 
 #weather-panel h2 {
-  font-size: 1.15rem;
-  font-weight: 700;
-  color: #e2e8f0;
-  margin-bottom: 4px;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  font-weight: 400;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--accent);
+  padding: 14px 16px 4px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 10px;
 }
 
+/* Big temp readout */
 #panel-weather-icon {
-  margin: 4px 0 10px;
-  min-height: 24px;
+  display: none; /* removed — too icon-heavy */
 }
 
-#panel-weather-icon img {
-  width: 64px;
-  height: 64px;
-  display: block;
-  filter: drop-shadow(0 0 8px rgba(125, 211, 252, 0.4));
-}
-
+/* Stats as terminal readout */
 .panel-stat {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  padding: 7px 0;
-  gap: 12px;
+  align-items: baseline;
+  padding: 7px 16px;
+  border-bottom: 1px solid var(--border);
+  gap: 8px;
+}
+
+.panel-stat:last-of-type {
+  border-bottom: none;
 }
 
 .panel-stat label {
-  font-size: 0.78rem;
-  color: #64748b;
-  font-weight: 500;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-dim);
   flex-shrink: 0;
 }
 
 .panel-stat span {
-  font-size: 0.88rem;
-  color: #cbd5e1;
-  font-weight: 600;
+  font-family: var(--mono);
+  font-size: 0.82rem;
+  color: var(--text);
   text-align: right;
   text-transform: capitalize;
 }
 
+/* Make temperature stand out */
+#panel-temp {
+  font-size: 1.4rem;
+  color: var(--accent);
+}
+
 #panel-updated {
-  margin-top: 10px;
-  font-size: 0.68rem;
-  color: #334155;
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--border);
   text-align: right;
 }
 
@@ -232,7 +238,7 @@ body {
 #api-key-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.92);
+  background: var(--bg);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -240,100 +246,83 @@ body {
 }
 
 #api-key-box {
-  background: rgba(8, 18, 40, 0.98);
-  border: 1px solid rgba(125, 211, 252, 0.25);
-  border-radius: 20px;
-  padding: 44px 40px 36px;
-  max-width: 440px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--accent);
+  padding: 40px 36px 32px;
+  max-width: 420px;
   width: 92%;
-  text-align: center;
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.8);
 }
 
 #api-key-icon {
-  font-size: 3rem;
-  margin-bottom: 14px;
-  line-height: 1;
+  display: none;
 }
 
 #api-key-box h2 {
-  font-size: 1.6rem;
-  font-weight: 700;
-  color: #7dd3fc;
-  letter-spacing: 2px;
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  font-weight: 400;
+  letter-spacing: 5px;
   text-transform: uppercase;
-  margin-bottom: 12px;
-  text-shadow: 0 0 20px rgba(125, 211, 252, 0.4);
+  color: var(--accent);
+  margin-bottom: 20px;
 }
 
 #api-key-box > p {
-  color: #64748b;
-  font-size: 0.9rem;
-  line-height: 1.5;
+  font-size: 0.82rem;
+  color: var(--text-dim);
+  line-height: 1.6;
   margin-bottom: 24px;
 }
 
 #api-key-box a {
-  color: #7dd3fc;
+  color: var(--accent);
   text-decoration: none;
 }
-
-#api-key-box a:hover {
-  text-decoration: underline;
-}
+#api-key-box a:hover { text-decoration: underline; }
 
 #api-key-input {
   width: 100%;
-  padding: 13px 16px;
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(125, 211, 252, 0.2);
-  border-radius: 10px;
-  color: #e2e8f0;
-  font-size: 0.95rem;
+  padding: 10px 12px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 0.82rem;
   outline: none;
-  margin-bottom: 14px;
-  letter-spacing: 0.5px;
+  margin-bottom: 12px;
+  letter-spacing: 1px;
   transition: border-color 0.15s;
 }
-
-#api-key-input:focus {
-  border-color: rgba(125, 211, 252, 0.6);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-#api-key-input::placeholder {
-  color: #334155;
-}
+#api-key-input:focus { border-color: var(--accent); }
+#api-key-input::placeholder { color: var(--text-muted); }
 
 #api-key-submit {
   width: 100%;
-  padding: 13px;
-  background: linear-gradient(135deg, #0369a1, #0ea5e9);
+  padding: 11px;
+  background: var(--accent);
   border: none;
-  border-radius: 10px;
-  color: #fff;
-  font-size: 1rem;
-  font-weight: 600;
+  color: #000;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  text-transform: uppercase;
   cursor: pointer;
-  letter-spacing: 0.5px;
-  transition: opacity 0.2s, transform 0.1s;
+  transition: opacity 0.15s;
   margin-bottom: 14px;
 }
-
-#api-key-submit:hover {
-  opacity: 0.88;
-}
-
-#api-key-submit:active {
-  transform: scale(0.98);
-}
+#api-key-submit:hover { opacity: 0.85; }
+#api-key-submit:active { opacity: 0.7; }
 
 .api-note {
-  font-size: 0.72rem;
-  color: #334155;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 1px;
+  color: var(--text-muted);
 }
 
-/* ── Loading screen ──────────────────────────────────────────────────────────── */
+/* ── Loading ─────────────────────────────────────────────────────────────────── */
 #loading {
   position: fixed;
   inset: 0;
@@ -342,25 +331,28 @@ body {
   align-items: center;
   justify-content: center;
   z-index: 50;
-  background: rgba(0, 0, 0, 0.85);
+  background: var(--bg);
   gap: 16px;
-  color: #64748b;
-  font-size: 0.9rem;
-  letter-spacing: 1px;
 }
 
 .spinner {
-  width: 48px;
-  height: 48px;
-  border: 3px solid rgba(125, 211, 252, 0.15);
-  border-top-color: #7dd3fc;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-top-color: var(--accent);
   border-radius: 50%;
-  animation: spin 0.75s linear infinite;
+  animation: spin 0.7s linear infinite;
 }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
+#loading p {
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--text-dim);
 }
+
+@keyframes spin { to { transform: rotate(360deg); } }
 
 /* ── Error toast ─────────────────────────────────────────────────────────────── */
 #error-toast {
@@ -369,67 +361,61 @@ body {
   left: 50%;
   transform: translateX(-50%);
   z-index: 40;
-  background: rgba(180, 30, 30, 0.95);
-  border: 1px solid rgba(255, 100, 100, 0.4);
-  border-radius: 10px;
-  padding: 12px 20px;
-  max-width: 500px;
+  background: var(--surface);
+  border: 1px solid var(--danger);
+  border-left: 3px solid var(--danger);
+  padding: 10px 18px;
+  max-width: 480px;
   width: 90%;
-  text-align: center;
-  font-size: 0.85rem;
-  color: #fecaca;
-  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.5px;
+  color: #e88080;
   animation: fadeUp 0.2s ease;
 }
 
 @keyframes fadeUp {
-  from { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
   to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
 /* ── Zoom badge ──────────────────────────────────────────────────────────────── */
 #zoom-badge {
   position: fixed;
-  bottom: 28px;
+  top: 28px;
   right: 28px;
   z-index: 10;
-  background: rgba(8, 18, 36, 0.88);
-  border: 1px solid rgba(125, 211, 252, 0.25);
-  border-radius: 20px;
-  padding: 6px 14px;
-  font-size: 0.75rem;
-  color: #7dd3fc;
-  letter-spacing: 0.5px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  padding: 5px 12px;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--accent);
   pointer-events: none;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
 }
 
 /* ── Utility ─────────────────────────────────────────────────────────────────── */
-.hidden {
-  display: none !important;
-}
+.hidden { display: none !important; }
 
 /* ── Mobile ──────────────────────────────────────────────────────────────────── */
 @media (max-width: 640px) {
   #weather-panel {
     top: auto;
+    left: 0;
     right: 0;
     bottom: 0;
-    left: 0;
     transform: none;
-    border-radius: 18px 18px 0 0;
-    min-width: unset;
     width: 100%;
-    animation: slideUp 0.25s ease;
+    border-top: 2px solid var(--accent);
+    animation: slideUp 0.2s ease;
   }
 
   @keyframes slideUp {
-    from { opacity: 0; transform: translateY(20px); }
+    from { opacity: 0; transform: translateY(12px); }
     to   { opacity: 1; transform: translateY(0); }
   }
 
-  #header h1 {
-    font-size: 1.1rem;
-  }
+  #header { bottom: auto; top: 16px; }
 }
