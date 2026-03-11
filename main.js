@@ -58,6 +58,9 @@ let globe           = null
 let centroids       = {}
 let pendingDebounce = null
 let tooltipX = 0, tooltipY = 0
+let unit            = 'C'        // 'C' | 'F'
+let lastPanelWeather = null
+let lastPanelFlagCode = null
 
 // ── Boot ───────────────────────────────────────────────────────────────────────
 
@@ -425,7 +428,7 @@ async function handleCountryHover(polygon) {
   const cached = countryWeatherMap.get(iso)
 
   tooltipName.textContent = name
-  tooltipTemp.textContent = cached ? `${cached.temp}°C` : '...'
+  tooltipTemp.textContent = cached ? displayTemp(cached.temp) : '...'
   tooltipDesc.textContent = cached ? cached.description : ''
   tooltip.classList.remove('hidden')
   positionTooltip()
@@ -434,7 +437,7 @@ async function handleCountryHover(polygon) {
   pendingDebounce = setTimeout(async () => {
     const weather = await fetchCountryWeather(iso)
     if (!weather || hoveredPolygon !== polygon) return
-    tooltipTemp.textContent = `${weather.temp}°C`
+    tooltipTemp.textContent = displayTemp(weather.temp)
     tooltipDesc.textContent = weather.description
     countryWeatherMap.set(iso, weather)
     refreshGlobeColors()
@@ -450,7 +453,7 @@ async function handleStateHover(polygon) {
   const cached = stateWeatherMap.get(key)
 
   tooltipName.textContent = name
-  tooltipTemp.textContent = cached ? `${cached.temp}°C` : '...'
+  tooltipTemp.textContent = cached ? displayTemp(cached.temp) : '...'
   tooltipDesc.textContent = cached ? cached.description : ''
   tooltip.classList.remove('hidden')
   positionTooltip()
@@ -459,7 +462,7 @@ async function handleStateHover(polygon) {
   pendingDebounce = setTimeout(async () => {
     const weather = await fetchStateWeather(polygon)
     if (!weather || hoveredPolygon !== polygon) return
-    tooltipTemp.textContent = `${weather.temp}°C`
+    tooltipTemp.textContent = displayTemp(weather.temp)
     tooltipDesc.textContent = weather.description
     stateWeatherMap.set(key, weather)
     refreshGlobeColors()
@@ -479,7 +482,7 @@ async function handleCityHover(city) {
   const cached = cityWeatherMap.get(key)
 
   tooltipName.textContent = `${city.name}, ${city.country}`
-  tooltipTemp.textContent = cached ? `${cached.temp}°C` : '...'
+  tooltipTemp.textContent = cached ? displayTemp(cached.temp) : '...'
   tooltipDesc.textContent = cached ? cached.description : ''
   tooltip.classList.remove('hidden')
   positionTooltip()
@@ -488,7 +491,7 @@ async function handleCityHover(city) {
   pendingDebounce = setTimeout(async () => {
     const weather = await fetchCityWeather(city)
     if (!weather || hoveredCity !== city) return
-    tooltipTemp.textContent = `${weather.temp}°C`
+    tooltipTemp.textContent = displayTemp(weather.temp)
     tooltipDesc.textContent = weather.description
     cityWeatherMap.set(key, weather)
     refreshCityColors()
@@ -574,9 +577,11 @@ async function handleCityClick(city) {
 }
 
 function showPanel(weather, flagCode) {
+  lastPanelWeather  = weather
+  lastPanelFlagCode = flagCode
   document.getElementById('panel-country').textContent  = weather.country
-  document.getElementById('panel-temp').textContent     = `${weather.temp}°C`
-  document.getElementById('panel-feels').textContent    = `${weather.feelsLike}°C`
+  document.getElementById('panel-temp').textContent     = displayTemp(weather.temp)
+  document.getElementById('panel-feels').textContent    = displayTemp(weather.feelsLike)
   document.getElementById('panel-humidity').textContent = `${weather.humidity}%`
   document.getElementById('panel-pressure').textContent = `${weather.pressure} hPa`
 
@@ -599,7 +604,11 @@ function showPanel(weather, flagCode) {
   panel.classList.remove('hidden')
 }
 
-panelClose.addEventListener('click', () => panel.classList.add('hidden'))
+panelClose.addEventListener('click', () => {
+  panel.classList.add('hidden')
+  lastPanelWeather = null
+  lastPanelFlagCode = null
+})
 
 // ── Globe color refresh ────────────────────────────────────────────────────────
 
@@ -649,6 +658,40 @@ function showError(msg) {
   if (errorTimer) clearTimeout(errorTimer)
   errorTimer = setTimeout(() => errorToast.classList.add('hidden'), 6000)
 }
+
+// ── Unit toggle ────────────────────────────────────────────────────────────────
+
+function displayTemp(celsius) {
+  if (unit === 'F') return `${Math.round(celsius * 9 / 5 + 32)}°F`
+  return `${celsius}°C`
+}
+
+function updateLegendLabels() {
+  document.getElementById('legend-min').textContent = unit === 'F' ? '-22°F' : '-30°C'
+  document.getElementById('legend-max').textContent = unit === 'F' ? '113°F' : '45°C'
+}
+
+document.getElementById('unit-toggle').addEventListener('click', () => {
+  unit = unit === 'C' ? 'F' : 'C'
+  document.getElementById('unit-toggle').textContent = unit === 'C' ? '°C' : '°F'
+  updateLegendLabels()
+  // Refresh panel if open
+  if (lastPanelWeather) showPanel(lastPanelWeather, lastPanelFlagCode)
+  // Refresh tooltip if visible
+  if (!tooltip.classList.contains('hidden')) {
+    if (hoveredCity) {
+      const w = cityWeatherMap.get(cityKey(hoveredCity))
+      if (w) tooltipTemp.textContent = displayTemp(w.temp)
+    } else if (hoveredPolygon) {
+      const key = currentMode === 'state'
+        ? hoveredPolygon.properties.adm1_code
+        : hoveredPolygon.properties.ISO_A2
+      const map = currentMode === 'state' ? stateWeatherMap : countryWeatherMap
+      const w = map.get(key)
+      if (w) tooltipTemp.textContent = displayTemp(w.temp)
+    }
+  }
+})
 
 // ── Start ──────────────────────────────────────────────────────────────────────
 
