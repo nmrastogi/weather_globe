@@ -21,7 +21,7 @@ const OWM_BASE = 'https://api.openweathermap.org/data/2.5/weather'
 
 // Altitude thresholds for layer switching
 const ZOOM_STATE_THRESHOLD = 1.5
-const ZOOM_CITY_THRESHOLD  = 0.35
+const ZOOM_CITY_THRESHOLD  = 0.6   // cities overlay appears on top of state polygons
 
 // ── DOM references ─────────────────────────────────────────────────────────────
 
@@ -51,7 +51,8 @@ let cityGeoData     = null  // loaded lazily on first zoom-in to city level
 let stateGeoLoading = false
 let cityGeoLoading  = false
 
-let currentMode     = 'country'  // 'country' | 'state' | 'city'
+let currentMode     = 'country'  // 'country' | 'state'
+let citiesShowing   = false      // city dots overlay (independent of polygon mode)
 let hoveredPolygon  = null
 let hoveredCity     = null
 let globe           = null
@@ -291,85 +292,96 @@ async function launchGlobe() {
 // ── Zoom / layer switching ─────────────────────────────────────────────────────
 
 let zoomSwitchTimer = null
+let cityDotTimer    = null
 
 function onCameraChange() {
   const altitude = globe.pointOfView().altitude
 
-  if (altitude < ZOOM_CITY_THRESHOLD && currentMode !== 'city') {
-    clearTimeout(zoomSwitchTimer)
-    zoomSwitchTimer = setTimeout(() => switchToCities(), 300)
-  } else if (altitude >= ZOOM_CITY_THRESHOLD && altitude < ZOOM_STATE_THRESHOLD && currentMode !== 'state') {
+  // Polygon layer: countries ↔ states
+  if (altitude < ZOOM_STATE_THRESHOLD && currentMode !== 'state') {
     clearTimeout(zoomSwitchTimer)
     zoomSwitchTimer = setTimeout(() => switchToStates(), 300)
   } else if (altitude >= ZOOM_STATE_THRESHOLD && currentMode !== 'country') {
     clearTimeout(zoomSwitchTimer)
     zoomSwitchTimer = setTimeout(() => switchToCountries(), 300)
   }
+
+  // City dots overlay: independent of polygon mode
+  if (altitude < ZOOM_CITY_THRESHOLD && !citiesShowing) {
+    clearTimeout(cityDotTimer)
+    cityDotTimer = setTimeout(() => showCityDots(), 300)
+  } else if (altitude >= ZOOM_CITY_THRESHOLD && citiesShowing) {
+    clearTimeout(cityDotTimer)
+    cityDotTimer = setTimeout(() => hideCityDots(), 300)
+  }
 }
 
-async function switchToCities() {
-  if (currentMode === 'city') return
-  currentMode = 'city'
-  hoveredPolygon = null
-  hoveredCity = null
-  tooltip.classList.add('hidden')
-  zoomBadge.textContent = 'City view'
-  zoomBadge.classList.remove('hidden')
-
-  // Ensure state polygons are shown as background context
-  const stateData = await loadStateData()
-  if (stateData && globe.polygonsData() !== stateData.features) {
-    globe.polygonsData(stateData.features)
-  }
+async function showCityDots() {
+  if (citiesShowing) return
+  citiesShowing = true
+  updateZoomBadge()
 
   const cities = await loadCityData()
-  if (!cities) {
-    // Fall back to state mode if city data fails
-    currentMode = 'state'
-    zoomBadge.textContent = 'State / Province view'
-    return
-  }
+  if (!cities) { citiesShowing = false; updateZoomBadge(); return }
 
   globe.pointsData(cities)
-  zoomBadge.textContent = 'City view'
+  updateZoomBadge()
+}
+
+function hideCityDots() {
+  if (!citiesShowing) return
+  citiesShowing = false
+  hoveredCity = null
+  globe.pointsData([])
+  updateZoomBadge()
 }
 
 async function switchToStates() {
   if (currentMode === 'state') return
   currentMode = 'state'
   hoveredPolygon = null
-  hoveredCity = null
   tooltip.classList.add('hidden')
-  globe.pointsData([])
-  zoomBadge.textContent = 'State view'
-  zoomBadge.classList.remove('hidden')
+  updateZoomBadge()
 
   const data = await loadStateData()
   if (!data) {
     currentMode = 'country'
-    zoomBadge.classList.add('hidden')
+    updateZoomBadge()
     return
   }
 
   globe.polygonsData(data.features)
-  zoomBadge.textContent = 'State / Province view'
+  updateZoomBadge()
 }
 
 function switchToCountries() {
   if (currentMode === 'country') return
   currentMode = 'country'
   hoveredPolygon = null
-  hoveredCity = null
   tooltip.classList.add('hidden')
-  globe.pointsData([])
-  zoomBadge.classList.add('hidden')
   globe.polygonsData(countryGeoData.features)
+  updateZoomBadge()
+}
+
+function updateZoomBadge() {
+  if (currentMode === 'country' && !citiesShowing) {
+    zoomBadge.classList.add('hidden')
+    return
+  }
+  zoomBadge.classList.remove('hidden')
+  if (currentMode === 'state' && citiesShowing) {
+    zoomBadge.textContent = 'States + Cities'
+  } else if (currentMode === 'state') {
+    zoomBadge.textContent = 'State / Province view'
+  } else {
+    zoomBadge.textContent = 'Loading cities...'
+  }
 }
 
 // ── Color accessors ────────────────────────────────────────────────────────────
 
 function getPolygonColor(d) {
-  if (currentMode === 'state' || currentMode === 'city') {
+  if (currentMode === 'state') {
     const w = stateWeatherMap.get(d.properties.adm1_code)
     return tempToColor(w ? w.temp : null)
   }
@@ -378,7 +390,7 @@ function getPolygonColor(d) {
 }
 
 function getPolygonSideColor(d) {
-  if (currentMode === 'state' || currentMode === 'city') {
+  if (currentMode === 'state') {
     const w = stateWeatherMap.get(d.properties.adm1_code)
     return tempToSideColor(w ? w.temp : null)
   }
@@ -395,11 +407,11 @@ document.addEventListener('mousemove', e => {
 })
 
 async function handleHover(polygon) {
+  // If currently hovering a city point, polygon hover is secondary — skip it
+  if (hoveredCity) return
+
   const prev = hoveredPolygon
   hoveredPolygon = polygon
-
-  // City mode uses onPointHover — ignore polygon hover
-  if (currentMode === 'city') return
 
   if (!polygon) {
     tooltip.classList.add('hidden')
@@ -514,8 +526,6 @@ function positionTooltip() {
 
 async function handleClick(polygon) {
   if (!polygon) return
-  // City mode uses onPointClick — ignore polygon clicks
-  if (currentMode === 'city') return
 
   if (currentMode === 'state') {
     await handleStateClick(polygon)
@@ -686,7 +696,7 @@ document.getElementById('unit-toggle').addEventListener('click', () => {
       const key = currentMode === 'state'
         ? hoveredPolygon.properties.adm1_code
         : hoveredPolygon.properties.ISO_A2
-      const map = currentMode === 'state' ? stateWeatherMap : countryWeatherMap
+      const map  = currentMode === 'state' ? stateWeatherMap : countryWeatherMap
       const w = map.get(key)
       if (w) tooltipTemp.textContent = displayTemp(w.temp)
     }
