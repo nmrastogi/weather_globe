@@ -14,8 +14,8 @@ const COUNTRY_GEOJSON_URL =
 const STATE_GEOJSON_URL =
   'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_1_states_provinces.geojson'
 
-const CITY_GEOJSON_URL =
-  'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_10m_populated_places_simple.geojson'
+// City data is pre-built by scripts/build-cities.cjs and served as a static asset
+const CITY_JSON_URL = () => import.meta.env.BASE_URL + 'cities.json'
 
 const OWM_BASE = 'https://api.openweathermap.org/data/2.5/weather'
 
@@ -133,21 +133,9 @@ async function loadCityData() {
   zoomBadge.textContent = 'Loading cities...'
 
   try {
-    const res = await fetch(CITY_GEOJSON_URL)
-    if (!res.ok) throw new Error('Failed to load city GeoJSON')
-    const raw = await res.json()
-
-    // Filter to major cities (pop > 300k) and normalize to plain objects
-    cityGeoData = raw.features
-      .filter(f => f.properties.POP_MAX > 300000)
-      .map(f => ({
-        name:    f.properties.NAME,
-        country: f.properties.ADM0NAME,
-        state:   f.properties.ADM1NAME,
-        lat:     f.geometry.coordinates[1],
-        lon:     f.geometry.coordinates[0],
-        pop:     f.properties.POP_MAX,
-      }))
+    const res = await fetch(CITY_JSON_URL())
+    if (!res.ok) throw new Error('Failed to load cities.json')
+    cityGeoData = await res.json()
 
     return cityGeoData
   } catch (err) {
