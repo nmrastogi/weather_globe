@@ -554,7 +554,7 @@ async function handleStateClick(polygon) {
   showPanel(weather, flagCode)
 
   if (globe && props.latitude != null && props.longitude != null) {
-    globe.pointOfView({ lat: props.latitude, lng: props.longitude, altitude: 0.6 }, 800)
+    globe.pointOfView({ lat: props.latitude, lng: props.longitude, altitude: 0.4 }, 800)
   }
 }
 
