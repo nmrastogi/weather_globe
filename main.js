@@ -63,6 +63,10 @@ let unit            = 'C'        // 'C' | 'F'
 let lastPanelWeather = null
 let lastPanelFlagCode = null
 
+let selectedState        = null  // GeoJSON feature currently expanded, or null
+let stateExpansionCities = []    // in-memory city list for selected state
+let expansionFetching    = false // guard against concurrent expand calls
+
 // ── Boot ───────────────────────────────────────────────────────────────────────
 
 function init() {
@@ -234,10 +238,12 @@ async function launchGlobe() {
     .atmosphereAltitude(0.12)
     // Polygon (country / state) layer
     .polygonsData(countryGeoData.features)
-    .polygonAltitude(d => d === hoveredPolygon ? 0.05 : 0.01)
-    .polygonCapColor(d => getPolygonColor(d))
+    .polygonAltitude(d => d === hoveredPolygon ? 0.03 : 0.01)
+    .polygonCapColor(d => d === selectedState ? getBrightCapColor(d) : getPolygonColor(d))
     .polygonSideColor(d => getPolygonSideColor(d))
-    .polygonStrokeColor(() => 'rgba(255,180,60,0.15)')
+    .polygonStrokeColor(d =>
+      d === selectedState ? 'rgba(255,230,100,1.0)' : 'rgba(255,180,60,0.15)'
+    )
     .polygonLabel(() => '')
     .onPolygonHover(handleHover)
     .onPolygonClick(handleClick)
@@ -250,7 +256,7 @@ async function launchGlobe() {
       return tempToColor(w ? w.temp : null)
     })
     .pointRadius(d => 0.3 + Math.log10(Math.max(1, d.pop / 300000)) * 0.15)
-    .pointAltitude(0.015)
+    .pointAltitude(0.02)
     .pointLabel(() => '')
     .onPointHover(handleCityHover)
     .onPointClick(handleCityClick)
@@ -277,6 +283,82 @@ async function launchGlobe() {
   setTimeout(preWarmCache, 1000)
 }
 
+// ── Point-in-polygon ───────────────────────────────────────────────────────────
+
+function isPointInRing(lat, lon, ring) {
+  let inside = false
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i]
+    const [xj, yj] = ring[j]
+    const intersects = ((yi > lat) !== (yj > lat)) &&
+      (lon < (xj - xi) * (lat - yi) / (yj - yi) + xi)
+    if (intersects) inside = !inside
+  }
+  return inside
+}
+
+function isPointInPolygonCoords(lat, lon, polygonCoords) {
+  if (!isPointInRing(lat, lon, polygonCoords[0])) return false
+  for (let h = 1; h < polygonCoords.length; h++) {
+    if (isPointInRing(lat, lon, polygonCoords[h])) return false
+  }
+  return true
+}
+
+function isPointInGeoJSONFeature(lat, lon, feature) {
+  const geom = feature.geometry
+  if (!geom) return false
+  if (geom.type === 'Polygon') return isPointInPolygonCoords(lat, lon, geom.coordinates)
+  if (geom.type === 'MultiPolygon') return geom.coordinates.some(p => isPointInPolygonCoords(lat, lon, p))
+  return false
+}
+
+// ── State expansion ────────────────────────────────────────────────────────────
+
+function syncPointsData() {
+  if (!globe) return
+  if (selectedState !== null) {
+    globe.pointsData(stateExpansionCities)
+  } else if (citiesShowing && cityGeoData) {
+    globe.pointsData(cityGeoData)
+  } else {
+    globe.pointsData([])
+  }
+}
+
+async function expandState(feature) {
+  if (expansionFetching) return
+  expansionFetching = true
+  selectedState = feature
+  stateExpansionCities = []
+  refreshGlobeColors()
+
+  const cities = await loadCityData()
+  expansionFetching = false
+  if (!cities || selectedState !== feature) return
+
+  stateExpansionCities = cities.filter(c => isPointInGeoJSONFeature(c.lat, c.lon, feature))
+  syncPointsData()
+
+  for (const city of stateExpansionCities) {
+    const key = cityKey(city)
+    if (cityWeatherMap.has(key)) continue
+    fetchCityWeather(city).then(weather => {
+      if (!weather || selectedState !== feature) return
+      cityWeatherMap.set(key, weather)
+      refreshCityColors()
+    })
+  }
+}
+
+function collapseState() {
+  if (selectedState === null) return
+  selectedState = null
+  stateExpansionCities = []
+  refreshGlobeColors()
+  syncPointsData()
+}
+
 // ── Zoom / layer switching ─────────────────────────────────────────────────────
 
 let zoomSwitchTimer = null
@@ -291,7 +373,10 @@ function onCameraChange() {
     zoomSwitchTimer = setTimeout(() => switchToStates(), 300)
   } else if (altitude >= ZOOM_STATE_THRESHOLD && currentMode !== 'country') {
     clearTimeout(zoomSwitchTimer)
-    zoomSwitchTimer = setTimeout(() => switchToCountries(), 300)
+    zoomSwitchTimer = setTimeout(() => {
+      collapseState()
+      switchToCountries()
+    }, 300)
   }
 
   // City dots overlay: independent of polygon mode
@@ -312,7 +397,7 @@ async function showCityDots() {
   const cities = await loadCityData()
   if (!cities) { citiesShowing = false; updateZoomBadge(); return }
 
-  globe.pointsData(cities)
+  syncPointsData()
   updateZoomBadge()
 }
 
@@ -320,7 +405,7 @@ function hideCityDots() {
   if (!citiesShowing) return
   citiesShowing = false
   hoveredCity = null
-  globe.pointsData([])
+  syncPointsData()
   updateZoomBadge()
 }
 
@@ -367,6 +452,16 @@ function updateZoomBadge() {
 }
 
 // ── Color accessors ────────────────────────────────────────────────────────────
+
+function getBrightCapColor(d) {
+  const base = getPolygonColor(d)
+  const m = base.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
+  if (!m) return base
+  const r = Math.min(255, parseInt(m[1]) + 80)
+  const g = Math.min(255, parseInt(m[2]) + 70)
+  const b = Math.min(255, parseInt(m[3]) + 50)
+  return `rgba(${r},${g},${b},0.95)`
+}
 
 function getPolygonColor(d) {
   if (currentMode === 'state') {
@@ -532,11 +627,6 @@ async function handleCountryClick(polygon) {
   countryWeatherMap.set(iso, weather)
   refreshGlobeColors()
   showPanel(weather, iso.toLowerCase())
-
-  const centroid = centroids[iso]
-  if (centroid && globe) {
-    globe.pointOfView({ lat: centroid.lat, lng: centroid.lon, altitude: 1.2 }, 1000)
-  }
 }
 
 async function handleStateClick(polygon) {
@@ -544,6 +634,13 @@ async function handleStateClick(polygon) {
   const key = props.adm1_code
   if (!key) return
 
+  if (selectedState === polygon) {
+    collapseState()
+    panel.classList.add('hidden')
+    return
+  }
+
+  expandState(polygon)
   let weather = stateWeatherMap.get(key) || await fetchStateWeather(polygon)
   if (!weather) return
 
@@ -616,8 +713,9 @@ function refreshGlobeColors() {
 }
 
 function refreshCityColors() {
-  if (!globe || currentMode !== 'city') return
-  globe.pointsData([...globe.pointsData()])
+  if (!globe) return
+  const data = globe.pointsData()
+  if (data && data.length > 0) globe.pointsData([...data])
 }
 
 // ── Pre-warm cache ─────────────────────────────────────────────────────────────
