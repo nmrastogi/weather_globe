@@ -255,11 +255,29 @@ async function launchGlobe() {
       const w = cityWeatherMap.get(cityKey(d))
       return tempToColor(w ? w.temp : null)
     })
-    .pointRadius(d => 0.3 + Math.log10(Math.max(1, d.pop / 300000)) * 0.15)
+    .pointRadius(d => selectedState !== null
+      ? 0.04 + Math.log10(Math.max(1, d.pop / 1000000)) * 0.02
+      : 0.06 + Math.log10(Math.max(1, d.pop / 300000)) * 0.03
+    )
     .pointAltitude(0.02)
     .pointLabel(() => '')
     .onPointHover(handleCityHover)
     .onPointClick(handleCityClick)
+    // Temperature badge labels (HTML elements layer)
+    .htmlElementsData([])
+    .htmlLat(d => d.lat)
+    .htmlLng(d => d.lon)
+    .htmlAltitude(0.025)
+    .htmlTransitionDuration(300)
+    .htmlElement(d => {
+      const key = cityKey(d)
+      const w = cityWeatherMap.get(key)
+      const el = document.createElement('div')
+      el.className = 'city-temp-badge'
+      el.textContent = w ? displayTemp(w.temp) : ''
+      el.style.display = w ? '' : 'none'
+      return el
+    })
     (globeEl)
 
   globe.controls().autoRotate = true
@@ -326,6 +344,17 @@ function syncPointsData() {
   }
 }
 
+function syncHtmlLabels() {
+  if (!globe) return
+  if (selectedState !== null) {
+    globe.htmlElementsData(stateExpansionCities)
+  } else if (citiesShowing && cityGeoData) {
+    globe.htmlElementsData(cityGeoData)
+  } else {
+    globe.htmlElementsData([])
+  }
+}
+
 async function expandState(feature) {
   if (expansionFetching) return
   expansionFetching = true
@@ -337,18 +366,23 @@ async function expandState(feature) {
   expansionFetching = false
   if (!cities || selectedState !== feature) return
 
-  stateExpansionCities = cities.filter(c => isPointInGeoJSONFeature(c.lat, c.lon, feature))
-  syncPointsData()
+  const allInState = cities.filter(c => isPointInGeoJSONFeature(c.lat, c.lon, feature))
+  stateExpansionCities = allInState
+    .sort((a, b) => b.pop - a.pop)
+    .slice(0, 10)
 
-  for (const city of stateExpansionCities) {
+  // Fetch weather for each; only add dot to globe once its weather arrives
+  const weathered = []
+  await Promise.all(stateExpansionCities.map(async city => {
+    if (selectedState !== feature) return
     const key = cityKey(city)
-    if (cityWeatherMap.has(key)) continue
-    fetchCityWeather(city).then(weather => {
-      if (!weather || selectedState !== feature) return
-      cityWeatherMap.set(key, weather)
-      refreshCityColors()
-    })
-  }
+    const weather = cityWeatherMap.get(key) || await fetchCityWeather(city)
+    if (!weather || selectedState !== feature) return
+    cityWeatherMap.set(key, weather)
+    weathered.push(city)
+    globe.pointsData([...weathered])
+    globe.htmlElementsData([...weathered])
+  }))
 }
 
 function collapseState() {
@@ -357,6 +391,7 @@ function collapseState() {
   stateExpansionCities = []
   refreshGlobeColors()
   syncPointsData()
+  syncHtmlLabels()
 }
 
 // ── Zoom / layer switching ─────────────────────────────────────────────────────
@@ -398,6 +433,7 @@ async function showCityDots() {
   if (!cities) { citiesShowing = false; updateZoomBadge(); return }
 
   syncPointsData()
+  syncHtmlLabels()
   updateZoomBadge()
 }
 
@@ -406,6 +442,7 @@ function hideCityDots() {
   citiesShowing = false
   hoveredCity = null
   syncPointsData()
+  syncHtmlLabels()
   updateZoomBadge()
 }
 
@@ -718,6 +755,12 @@ function refreshCityColors() {
   if (data && data.length > 0) globe.pointsData([...data])
 }
 
+function refreshHtmlLabels() {
+  if (!globe) return
+  const data = globe.htmlElementsData()
+  if (data && data.length > 0) globe.htmlElementsData([...data])
+}
+
 // ── Pre-warm cache ─────────────────────────────────────────────────────────────
 
 async function preWarmCache() {
@@ -763,8 +806,10 @@ function displayTemp(celsius) {
 }
 
 function updateLegendLabels() {
-  document.getElementById('legend-min').textContent = unit === 'F' ? '-22°F' : '-30°C'
-  document.getElementById('legend-max').textContent = unit === 'F' ? '113°F' : '45°C'
+  document.getElementById('legend-min').textContent  = unit === 'F' ? '-22°F' : '-30°C'
+  document.getElementById('legend-mid1').textContent = unit === 'F' ?  '14°F' : '-10°C'
+  document.getElementById('legend-mid2').textContent = unit === 'F' ?  '68°F' :  '20°C'
+  document.getElementById('legend-max').textContent  = unit === 'F' ? '113°F' :  '45°C'
 }
 
 document.getElementById('unit-toggle').addEventListener('click', () => {
@@ -787,8 +832,10 @@ document.getElementById('unit-toggle').addEventListener('click', () => {
       if (w) tooltipTemp.textContent = displayTemp(w.temp)
     }
   }
+  refreshHtmlLabels()
 })
 
 // ── Start ──────────────────────────────────────────────────────────────────────
 
+updateLegendLabels()
 init()

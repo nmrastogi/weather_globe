@@ -64,6 +64,12 @@ body {
   margin-bottom: 6px;
 }
 
+#legend-gradient-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 .legend-label {
   font-family: var(--mono);
   font-size: 0.6rem;
@@ -73,7 +79,7 @@ body {
 
 #legend-gradient {
   width: 100px;
-  height: 3px;
+  height: 6px;
   background: linear-gradient(to right,
     rgb(0, 60, 200),
     rgb(0, 180, 220),
@@ -82,6 +88,19 @@ body {
     rgb(255, 120, 0),
     rgb(210, 0, 0)
   );
+  border-radius: 1px;
+}
+
+#legend-ticks {
+  display: flex;
+  justify-content: space-between;
+}
+
+.legend-tick {
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  color: var(--text-dim);
+  white-space: nowrap;
 }
 
 #hint {
@@ -89,6 +108,25 @@ body {
   font-size: 0.58rem;
   color: var(--text-muted);
   letter-spacing: 1px;
+}
+
+/* ── City temperature badges (HTML elements layer) ──────────────────────────── */
+.city-temp-badge {
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  padding: 1px 4px;
+  border-radius: 2px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -130%);
+  user-select: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  line-height: 1.4;
 }
 
 /* ── Tooltip ─────────────────────────────────────────────────────────────────── */
