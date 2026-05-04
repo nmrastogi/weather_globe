@@ -34,6 +34,7 @@ body {
   width: 100vw;
   height: 100vh;
   cursor: grab;
+  transition: height 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 #globe:active { cursor: grabbing; }
 
@@ -391,6 +392,125 @@ body {
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Drill-down panel ────────────────────────────────────────────────────────── */
+#drill-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 42vh;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  transform: translateY(100%);
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 20;
+}
+#drill-panel.open { transform: translateY(0); }
+
+#drill-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 20px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+#drill-title {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+#drill-back,
+#drill-close {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  padding: 3px 10px;
+  border-radius: 2px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+#drill-back:hover,
+#drill-close:hover {
+  color: var(--text);
+  border-color: var(--accent);
+}
+#drill-back.hidden { display: none; }
+
+#drill-cards {
+  display: flex;
+  gap: 12px;
+  padding: 14px 20px;
+  overflow-x: auto;
+  flex: 1;
+  align-items: flex-start;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+#drill-cards::-webkit-scrollbar { height: 4px; }
+#drill-cards::-webkit-scrollbar-track { background: transparent; }
+#drill-cards::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.drill-card {
+  flex-shrink: 0;
+  width: 130px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--border);
+  border-radius: 3px;
+  padding: 11px 12px;
+  cursor: pointer;
+  transition: transform 0.15s, border-color 0.15s;
+}
+.drill-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent-dim);
+}
+
+.card-name {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  color: var(--text-dim);
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.card-temp {
+  font-family: var(--mono);
+  font-size: 1.35rem;
+  font-weight: 600;
+  color: var(--text);
+  line-height: 1;
+  margin-bottom: 5px;
+}
+.card-temp.loading { color: var(--text-muted); font-size: 1rem; }
+
+.card-desc {
+  font-size: 0.58rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.drill-empty {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  padding: 20px 0;
+}
 
 /* ── Error toast ─────────────────────────────────────────────────────────────── */
 #error-toast {
