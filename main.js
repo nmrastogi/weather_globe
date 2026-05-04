@@ -14,6 +14,9 @@ const COUNTRY_GEOJSON_URL =
 const STATE_GEOJSON_URL =
   'https://raw.githubusercontent.com/nvkelso/natural-earth-vector/master/geojson/ne_50m_admin_1_states_provinces.geojson'
 
+// Pre-processed local state file (ne_10m simplified) — covers 241 countries, served gzipped ~3.5MB
+const DRILL_STATE_GEOJSON_URL = () => import.meta.env.BASE_URL + 'states.json'
+
 // City data is pre-built by scripts/build-cities.cjs and served as a static asset
 const CITY_JSON_URL = () => import.meta.env.BASE_URL + 'cities.json'
 
@@ -50,10 +53,12 @@ const countryWeatherMap = new Map()  // ISO_A2    → weather
 const stateWeatherMap   = new Map()  // adm1_code → weather
 const cityWeatherMap    = new Map()  // city key  → weather
 
-let countryGeoData  = null
-let stateGeoData    = null  // loaded lazily on first zoom-in to state level
-let cityGeoData     = null  // loaded lazily on first zoom-in to city level
-let stateGeoLoading = false
+let countryGeoData      = null
+let stateGeoData        = null  // ne_50m — loaded lazily on first zoom-in to state level
+let drillStateGeoData   = null  // ne_10m — loaded lazily on first drill panel open
+let cityGeoData         = null  // loaded lazily on first zoom-in to city level
+let stateGeoLoading      = false
+let drillStateGeoLoading = false
 let cityGeoLoading  = false
 
 let currentMode     = 'country'  // 'country' | 'state'
@@ -134,6 +139,24 @@ async function loadStateData() {
     return null
   } finally {
     stateGeoLoading = false
+  }
+}
+
+async function loadDrillStateData() {
+  if (drillStateGeoData) return drillStateGeoData
+  if (drillStateGeoLoading) return null
+  drillStateGeoLoading = true
+
+  try {
+    const res = await fetch(DRILL_STATE_GEOJSON_URL())
+    if (!res.ok) throw new Error('Failed to load drill state GeoJSON')
+    drillStateGeoData = await res.json()
+    return drillStateGeoData
+  } catch (err) {
+    console.warn('Drill state GeoJSON load failed:', err)
+    return null
+  } finally {
+    drillStateGeoLoading = false
   }
 }
 
@@ -712,7 +735,7 @@ async function drillToStates(countryFeature) {
   drillCards.innerHTML = ''
   openDrillPanel()
 
-  const data = await loadStateData()
+  const data = await loadDrillStateData()
   if (!data) {
     drillCards.innerHTML = '<p class="drill-empty">Could not load state data.</p>'
     return
