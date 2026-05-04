@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Weather Globe</title>
   <script src="https://cdn.jsdelivr.net/npm/globe.gl@2.45.0/dist/globe.gl.min.js"></script>
-  <script type="module" crossorigin src="/weather_globe/assets/index-CrlSI6Ep.js"></script>
-  <link rel="stylesheet" crossorigin href="/weather_globe/assets/index-BcGkrzP5.css">
+  <script type="module" crossorigin src="/weather_globe/assets/index-Cl375RTC.js"></script>
+  <link rel="stylesheet" crossorigin href="/weather_globe/assets/index-CtLDHicw.css">
 </head>
 <body>
   <div id="globe"></div>
@@ -77,6 +77,15 @@
       <button id="api-key-submit">Launch Globe</button>
       <p class="api-note">Your key is stored only in this browser session.</p>
     </div>
+  </div>
+
+  <div id="drill-panel">
+    <div id="drill-header">
+      <button id="drill-back" class="hidden">&#8592; States</button>
+      <span id="drill-title"></span>
+      <button id="drill-close">&#x2715;</button>
+    </div>
+    <div id="drill-cards"></div>
   </div>
 
   <div id="loading" class="hidden">
