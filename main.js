@@ -531,12 +531,17 @@ function getBrightCapColor(d) {
   return `rgba(${r},${g},${b},0.95)`
 }
 
+function countryISO(props) {
+  const iso = props.ISO_A2
+  return (!iso || iso === '-99') ? (props.ISO_A2_EH || null) : iso
+}
+
 function getPolygonColor(d) {
   if (currentMode === 'state') {
     const w = stateWeatherMap.get(d.properties.adm1_code)
     return tempToColor(w ? w.temp : null)
   }
-  const w = countryWeatherMap.get(d.properties.ISO_A2)
+  const w = countryWeatherMap.get(countryISO(d.properties))
   return tempToColor(w ? w.temp : null)
 }
 
@@ -545,7 +550,7 @@ function getPolygonSideColor(d) {
     const w = stateWeatherMap.get(d.properties.adm1_code)
     return tempToSideColor(w ? w.temp : null)
   }
-  const w = countryWeatherMap.get(d.properties.ISO_A2)
+  const w = countryWeatherMap.get(countryISO(d.properties))
   return tempToSideColor(w ? w.temp : null)
 }
 
@@ -584,8 +589,8 @@ async function handleHover(polygon) {
 }
 
 async function handleCountryHover(polygon) {
-  const iso = polygon.properties.ISO_A2
-  if (!iso || iso === '-99') { tooltip.classList.add('hidden'); return }
+  const iso = countryISO(polygon.properties)
+  if (!iso) { tooltip.classList.add('hidden'); return }
 
   const name = polygon.properties.NAME_EN || polygon.properties.NAME || iso
   const cached = countryWeatherMap.get(iso)
@@ -687,12 +692,14 @@ async function handleClick(polygon) {
 
 // ── Drill-down panel ───────────────────────────────────────────────────────────
 
-const DRILL_HEIGHT = '42vh'
-
 function openDrillPanel() {
-  globeEl.style.height = `calc(100vh - ${DRILL_HEIGHT})`
   drillPanel.classList.add('open')
-  setTimeout(() => window.dispatchEvent(new Event('resize')), 420)
+  // Measure actual panel height after it's visible, then shrink globe to match
+  requestAnimationFrame(() => {
+    const h = drillPanel.offsetHeight
+    globeEl.style.height = `calc(100vh - ${h}px)`
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 420)
+  })
 }
 
 function closeDrillPanel() {
@@ -727,7 +734,7 @@ async function drillToStates(countryFeature) {
   drillLevel = 'states'
   drillCountryFeature = countryFeature
 
-  const iso = countryFeature.properties.ISO_A2
+  const iso = countryISO(countryFeature.properties)
   const name = countryFeature.properties.NAME_EN || countryFeature.properties.ADMIN || 'Country'
 
   drillTitle.textContent = name
@@ -821,8 +828,8 @@ async function drillToCities(stateFeature) {
 }
 
 async function handleCountryClick(polygon) {
-  const iso = polygon.properties.ISO_A2
-  if (!iso || iso === '-99') return
+  const iso = countryISO(polygon.properties)
+  if (!iso) return
 
   let weather = countryWeatherMap.get(iso) || await fetchCountryWeather(iso)
   if (!weather) return
@@ -993,7 +1000,7 @@ document.getElementById('unit-toggle').addEventListener('click', () => {
     } else if (hoveredPolygon) {
       const key = currentMode === 'state'
         ? hoveredPolygon.properties.adm1_code
-        : hoveredPolygon.properties.ISO_A2
+        : countryISO(hoveredPolygon.properties)
       const map  = currentMode === 'state' ? stateWeatherMap : countryWeatherMap
       const w = map.get(key)
       if (w) tooltipTemp.textContent = displayTemp(w.temp)

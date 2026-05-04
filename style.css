@@ -399,7 +399,7 @@ body {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 42vh;
+  height: auto;
   background: var(--surface);
   border-top: 1px solid var(--border);
   display: flex;
@@ -414,7 +414,7 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 20px;
+  padding: 7px 16px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -428,8 +428,7 @@ body {
   color: var(--accent);
 }
 
-#drill-back,
-#drill-close {
+#drill-back {
   background: none;
   border: 1px solid var(--border);
   color: var(--text-dim);
@@ -440,19 +439,39 @@ body {
   cursor: pointer;
   transition: color 0.15s, border-color 0.15s;
 }
-#drill-back:hover,
-#drill-close:hover {
+#drill-back:hover {
   color: var(--text);
   border-color: var(--accent);
 }
 #drill-back.hidden { display: none; }
 
+#drill-close {
+  background: var(--danger);
+  border: none;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  transition: background 0.15s, transform 0.15s;
+  flex-shrink: 0;
+}
+#drill-close:hover {
+  background: #e74c3c;
+  transform: scale(1.1);
+}
+
 #drill-cards {
   display: flex;
-  gap: 12px;
-  padding: 14px 20px;
+  gap: 8px;
+  padding: 12px 16px 28px;
   overflow-x: auto;
-  flex: 1;
   align-items: flex-start;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
@@ -463,12 +482,12 @@ body {
 
 .drill-card {
   flex-shrink: 0;
-  width: 130px;
+  width: 118px;
   background: var(--bg);
   border: 1px solid var(--border);
   border-top: 3px solid var(--border);
   border-radius: 3px;
-  padding: 11px 12px;
+  padding: 7px 10px;
   cursor: pointer;
   transition: transform 0.15s, border-color 0.15s;
 }
@@ -483,7 +502,7 @@ body {
   color: var(--text-dim);
   letter-spacing: 0.5px;
   text-transform: uppercase;
-  margin-bottom: 8px;
+  margin-bottom: 5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -491,11 +510,11 @@ body {
 
 .card-temp {
   font-family: var(--mono);
-  font-size: 1.35rem;
+  font-size: 1.25rem;
   font-weight: 600;
   color: var(--text);
   line-height: 1;
-  margin-bottom: 5px;
+  margin-bottom: 4px;
 }
 .card-temp.loading { color: var(--text-muted); font-size: 1rem; }
 
