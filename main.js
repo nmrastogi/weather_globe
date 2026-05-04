@@ -38,6 +38,11 @@ const apiInput     = document.getElementById('api-key-input')
 const apiSubmit    = document.getElementById('api-key-submit')
 const errorToast   = document.getElementById('error-toast')
 const zoomBadge    = document.getElementById('zoom-badge')
+const drillPanel   = document.getElementById('drill-panel')
+const drillCards   = document.getElementById('drill-cards')
+const drillTitle   = document.getElementById('drill-title')
+const drillBack    = document.getElementById('drill-back')
+const drillClose   = document.getElementById('drill-close')
 
 // ── State ──────────────────────────────────────────────────────────────────────
 
@@ -66,6 +71,9 @@ let lastPanelFlagCode = null
 let selectedState        = null  // GeoJSON feature currently expanded, or null
 let stateExpansionCities = []    // in-memory city list for selected state
 let expansionFetching    = false // guard against concurrent expand calls
+
+let drillLevel          = null  // null | 'states' | 'cities'
+let drillCountryFeature = null  // GeoJSON feature of the currently drilled country
 
 // ── Boot ───────────────────────────────────────────────────────────────────────
 
@@ -654,6 +662,141 @@ async function handleClick(polygon) {
   }
 }
 
+// ── Drill-down panel ───────────────────────────────────────────────────────────
+
+const DRILL_HEIGHT = '42vh'
+
+function openDrillPanel() {
+  globeEl.style.height = `calc(100vh - ${DRILL_HEIGHT})`
+  drillPanel.classList.add('open')
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 420)
+}
+
+function closeDrillPanel() {
+  globeEl.style.height = '100vh'
+  drillPanel.classList.remove('open')
+  drillLevel = null
+  drillCountryFeature = null
+  setTimeout(() => window.dispatchEvent(new Event('resize')), 420)
+}
+
+function createCard(name, weather, onClick) {
+  const card = document.createElement('div')
+  card.className = 'drill-card'
+  if (weather) card.style.borderTopColor = tempToColor(weather.temp)
+  card.innerHTML = `
+    <div class="card-name">${name}</div>
+    <div class="card-temp ${weather ? '' : 'loading'}">${weather ? displayTemp(weather.temp) : '…'}</div>
+    <div class="card-desc">${weather ? capitalize(weather.description) : ''}</div>
+  `
+  card.addEventListener('click', onClick)
+  return card
+}
+
+function updateCard(card, weather) {
+  card.style.borderTopColor = tempToColor(weather.temp)
+  card.querySelector('.card-temp').textContent = displayTemp(weather.temp)
+  card.querySelector('.card-temp').classList.remove('loading')
+  card.querySelector('.card-desc').textContent = capitalize(weather.description)
+}
+
+async function drillToStates(countryFeature) {
+  drillLevel = 'states'
+  drillCountryFeature = countryFeature
+
+  const iso = countryFeature.properties.ISO_A2
+  const name = countryFeature.properties.NAME_EN || countryFeature.properties.ADMIN || 'Country'
+
+  drillTitle.textContent = name
+  drillBack.classList.add('hidden')
+  drillCards.innerHTML = ''
+  openDrillPanel()
+
+  const data = await loadStateData()
+  if (!data) {
+    drillCards.innerHTML = '<p class="drill-empty">Could not load state data.</p>'
+    return
+  }
+
+  const countryStates = data.features.filter(f =>
+    (f.properties.iso_a2 || '').toUpperCase() === iso.toUpperCase()
+  )
+
+  if (countryStates.length === 0) {
+    drillCards.innerHTML = '<p class="drill-empty">No state data available.</p>'
+    return
+  }
+
+  const cardMap = new Map()
+  countryStates.forEach(feature => {
+    const key = feature.properties.adm1_code
+    const cached = stateWeatherMap.get(key)
+    const card = createCard(feature.properties.name, cached || null, () => drillToCities(feature))
+    card.dataset.key = key
+    drillCards.appendChild(card)
+    cardMap.set(key, card)
+  })
+
+  countryStates.forEach(async feature => {
+    const key = feature.properties.adm1_code
+    if (stateWeatherMap.get(key)) return
+    const weather = await fetchStateWeather(feature)
+    if (!weather) return
+    stateWeatherMap.set(key, weather)
+    const card = cardMap.get(key)
+    if (card) updateCard(card, weather)
+  })
+}
+
+async function drillToCities(stateFeature) {
+  drillLevel = 'cities'
+
+  drillTitle.textContent = stateFeature.properties.name
+  drillBack.classList.remove('hidden')
+  drillCards.innerHTML = '<p class="drill-empty">Loading cities…</p>'
+
+  const cities = await loadCityData()
+  if (!cities) {
+    drillCards.innerHTML = '<p class="drill-empty">Could not load city data.</p>'
+    return
+  }
+
+  const stateCities = cities
+    .filter(c => isPointInGeoJSONFeature(c.lat, c.lon, stateFeature))
+    .sort((a, b) => b.pop - a.pop)
+    .slice(0, 15)
+
+  drillCards.innerHTML = ''
+
+  if (stateCities.length === 0) {
+    drillCards.innerHTML = '<p class="drill-empty">No city data for this state.</p>'
+    return
+  }
+
+  const cardMap = new Map()
+  stateCities.forEach(city => {
+    const key = cityKey(city)
+    const cached = cityWeatherMap.get(key)
+    const card = createCard(city.name, cached || null, () => {
+      const w = cityWeatherMap.get(cityKey(city))
+      if (w) showPanel(w, '')
+    })
+    card.dataset.key = key
+    drillCards.appendChild(card)
+    cardMap.set(key, card)
+  })
+
+  stateCities.forEach(async city => {
+    const key = cityKey(city)
+    if (cityWeatherMap.get(key)) return
+    const weather = await fetchCityWeather(city)
+    if (!weather) return
+    cityWeatherMap.set(key, weather)
+    const card = cardMap.get(key)
+    if (card) updateCard(card, weather)
+  })
+}
+
 async function handleCountryClick(polygon) {
   const iso = polygon.properties.ISO_A2
   if (!iso || iso === '-99') return
@@ -664,6 +807,7 @@ async function handleCountryClick(polygon) {
   countryWeatherMap.set(iso, weather)
   refreshGlobeColors()
   showPanel(weather, iso.toLowerCase())
+  drillToStates(polygon)
 }
 
 async function handleStateClick(polygon) {
@@ -834,6 +978,12 @@ document.getElementById('unit-toggle').addEventListener('click', () => {
   }
   refreshHtmlLabels()
 })
+
+drillBack.addEventListener('click', () => {
+  if (drillCountryFeature) drillToStates(drillCountryFeature)
+})
+
+drillClose.addEventListener('click', closeDrillPanel)
 
 // ── Start ──────────────────────────────────────────────────────────────────────
 
