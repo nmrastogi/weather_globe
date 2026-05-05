@@ -17,7 +17,7 @@ https.get(URL, res => {
   res.on('end', () => {
     const raw = JSON.parse(Buffer.concat(chunks))
     const cities = raw.features
-      .filter(f => (f.properties.POP_MAX || f.properties.pop_max || 0) > 300000)
+      .filter(f => (f.properties.POP_MAX || f.properties.pop_max || 0) > 100000)
       .map(f => ({
         name:    f.properties.NAME    || f.properties.name,
         country: f.properties.ADM0NAME || f.properties.adm0name,

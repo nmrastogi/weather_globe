@@ -531,6 +531,31 @@ body {
   padding: 20px 0;
 }
 
+.drill-loading {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  padding: 20px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.drill-loading::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: drill-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes drill-spin {
+  to { transform: rotate(360deg); }
+}
+
 /* ── Error toast ─────────────────────────────────────────────────────────────── */
 #error-toast {
   position: fixed;

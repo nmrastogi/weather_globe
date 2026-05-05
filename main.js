@@ -329,7 +329,10 @@ async function launchGlobe() {
   // Watch zoom level to switch between country / state / city views
   globe.controls().addEventListener('change', onCameraChange)
 
-  setTimeout(preWarmCache, 1000)
+  setTimeout(() => {
+    preWarmCache()
+    loadDrillStateData()  // pre-load states.json so first click is instant
+  }, 1000)
 }
 
 // ── Point-in-polygon ───────────────────────────────────────────────────────────
@@ -831,7 +834,19 @@ async function handleCountryClick(polygon) {
   const iso = countryISO(polygon.properties)
   if (!iso) return
 
-  let weather = countryWeatherMap.get(iso) || await fetchCountryWeather(iso)
+  // Open panel immediately with a loading state so there's no silent freeze
+  drillTitle.textContent = polygon.properties.NAME_EN || polygon.properties.ADMIN || ''
+  drillBack.classList.add('hidden')
+  drillCards.innerHTML = '<p class="drill-loading">Loading…</p>'
+  openDrillPanel()
+
+  // Fetch weather + pre-warm states.json in parallel
+  const cached = countryWeatherMap.get(iso)
+  const [weather] = await Promise.all([
+    cached ? Promise.resolve(cached) : fetchCountryWeather(iso),
+    loadDrillStateData()
+  ])
+
   if (!weather) return
 
   countryWeatherMap.set(iso, weather)
